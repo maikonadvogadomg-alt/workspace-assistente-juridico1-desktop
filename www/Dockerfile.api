@@ -1,0 +1,25 @@
+FROM node:24-alpine
+
+WORKDIR /app
+
+# Instala pnpm
+RUN corepack enable && corepack prepare pnpm@latest --activate
+
+# Copia manifests primeiro (cache de dependências)
+COPY package.json pnpm-workspace.yaml pnpm-lock.yaml ./
+COPY lib/db/package.json ./lib/db/
+COPY artifacts/api-server/package.json ./artifacts/api-server/
+
+# Instala dependências de produção
+RUN pnpm install --frozen-lockfile --prod
+
+# Copia o código fonte
+COPY lib/ ./lib/
+COPY artifacts/api-server/ ./artifacts/api-server/
+
+# Build do servidor
+RUN pnpm --filter @workspace/api-server run build
+
+EXPOSE 8080
+
+CMD ["node", "artifacts/api-server/dist/index.cjs"]

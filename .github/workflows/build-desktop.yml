@@ -1,0 +1,71 @@
+name: Build Desktop Apps
+
+on:
+  push:
+    branches: [main, master]
+  workflow_dispatch:
+
+jobs:
+  build:
+    strategy:
+      matrix:
+        include:
+          - os: ubuntu-latest
+            label: linux
+            ext: AppImage
+          - os: windows-latest
+            label: windows
+            ext: exe
+          - os: macos-latest
+            label: mac
+            ext: dmg
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install dependencies
+        run: npm install
+
+      - name: Build desktop app
+        run: npm run build
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Localizar instalador gerado
+        id: find
+        shell: bash
+        run: |
+          FILE=$(find dist -name "*.${{ matrix.ext }}" | head -1)
+          echo "file=$FILE" >> $GITHUB_OUTPUT
+          echo "Instalador: $FILE"
+
+      - name: Deletar release anterior (se existir)
+        if: steps.find.outputs.file != ''
+        shell: bash
+        run: |
+          gh release delete latest-${{ matrix.label }} --yes 2>/dev/null || true
+          git push origin --delete latest-${{ matrix.label }} 2>/dev/null || true
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Publicar como Release público
+        if: steps.find.outputs.file != ''
+        shell: bash
+        run: |
+          gh release create latest-${{ matrix.label }} \
+            --title "✅ -workspace-assistente-juridico1 — ${{ matrix.label }} (mais recente)" \
+            --notes "Instalador gerado automaticamente. Clique no arquivo abaixo para baixar." \
+            --latest \
+            "${{ steps.find.outputs.file }}"
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
